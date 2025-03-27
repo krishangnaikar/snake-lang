@@ -23,7 +23,7 @@ This project implements a basic interpreter for a custom programming language ca
 - **Variables** and **Assignment**
 - **Arithmetic Expressions**: `+`, `-`, `*`, `/`
 - **Comparison Operators**: `==`, `<`, `>`, `<=`, `>=`
-- **Conditionals**: `if`, `else`
+- **Conditionals**: `if`, `elif`, `else`
 - **Loops**:
   - `while` loops
   - `for` loops with `in`
