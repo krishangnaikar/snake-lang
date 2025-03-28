@@ -77,15 +77,60 @@ class Lexer {
         this.advance(); // Skip the closing bracket
         return { type: 'LIST', value: result };
     }
+    funcs() {
+        this.advance(); // Skip the space
+
+        let name = '';
+
+
+        while (this.currentChar !== null && /[a-zA-Z_]/.test(this.currentChar)) {
+            name += this.currentChar;
+            this.advance();
+        }
+        //console.log(name)
+
+        this.advance() // Skip the lpara
+        let params = [];
+
+        while (this.currentChar !== null && this.currentChar !== ')') {
+
+            if (this.currentChar === ',') {
+                this.advance(); // Skip the comma
+                continue;
+            }
+
+            if (/[a-zA-Z_]/.test(this.currentChar)) {
+                params.push(this.identifier());
+                continue;
+            }
+
+
+            if (/\s/.test(this.currentChar)) {
+                this.advance(); // Skip the space
+                continue;
+            }
+
+        }
+        if (this.currentChar === null) {
+            throw new Error('Unterminated function');
+        }
+        this.advance();
+        return {type: "FUNCTION_DEFINE", value: name, params: params}
+    }
     identifier() {
         let result = '';
         while (this.currentChar !== null && /[a-zA-Z_]/.test(this.currentChar)) {
             result += this.currentChar;
             this.advance();
+            if (result === "def") {
+                return this.funcs();
+            }
         }
         if (this.currentChar == ".") {
             return this.listFunc(result);
         }
+
+
 
         if (result === "for") {
             this.advance(); // Skip the space
@@ -135,6 +180,7 @@ class Lexer {
             this.advance(); // Skip the rpara
             return {type: "LIST_FUNC", value: "range", params: [start, end]};
         }
+
         // 'print' is a reserved keyword.
         if (result === 'print') {
             return { type: 'PRINT', value: result };
@@ -142,11 +188,50 @@ class Lexer {
         if (result === 'if') {
             return { type: 'IF', value: result };
         }
+        if (result === 'elif') {
+            return { type: 'ELIF', value: result };
+        }
         if (result === 'else') {
             return { type: 'ELSE', value: result };
         }
         if (result === 'while') {
             return { type: 'WHILE', value: result };
+        }
+        if (this.currentChar === "(") {
+            this.advance(); // Skip the lpara
+            let params = [];
+
+            while (this.currentChar !== null && this.currentChar !== ')') {
+                if (this.currentChar === ',') {
+                    this.advance(); // Skip the comma
+                    continue;
+                }
+                if (/[0-9]/.test(this.currentChar)) {
+                    params.push(this.number());
+                    continue;
+                }
+                if (/[a-zA-Z_]/.test(this.currentChar)) {
+                    params.push(this.identifier());
+                    continue;
+                }
+
+                if (this.currentChar === '"') {
+                    params.push(this.string());
+                    continue;
+                }
+                if (this.currentChar === '[') {
+                    params.push(this.list());
+                    continue;
+                }
+                if (/\s/.test(this.currentChar)) {
+                    this.advance(); // Skip the space
+                }
+            }
+            if (this.currentChar === null) {
+                throw new Error('Unterminated function call');
+            }
+            this.advance(); // Skip the rpara
+            return { type: 'FUNCTION_CALL', value: result, params: params };
         }
         return { type: 'IDENTIFIER', value: result };
     }
@@ -263,12 +348,13 @@ class Lexer {
 class Parser {
     constructor(lexer) {
         this.lexer = lexer;
+
         this.currentToken = lexer.getNextToken();
     }
     eat(tokenType) {
         if (this.currentToken.type === tokenType) {
             this.currentToken = this.lexer.getNextToken();
-            //console.log(this.currentToken);
+
         } else {
             throw new Error(`Expected token ${tokenType} but got ${this.currentToken.type}`);
         }
@@ -294,12 +380,17 @@ class Parser {
         this.eat('IF');
         let condition = this.parseCondition()
         let trueBranch = this.block();
+        let elifBranches = [];
+        while (this.currentToken.type === 'ELIF') {
+            this.eat('ELIF');
+            elifBranches.push({condition: this.parseCondition(), block: this.block()});
+        }
         let falseBranch = null;
         if (this.currentToken.type === 'ELSE') {
             this.eat('ELSE');
             falseBranch = this.block();
         }
-        return { type: 'IF_STMT', condition, trueBranch, falseBranch };
+        return { type: 'IF_STMT', condition, trueBranch, elifBranches, falseBranch };
     }
     whileStatement() {
         this.eat('WHILE');
@@ -313,6 +404,13 @@ class Parser {
         this.eat('FOR');
         let body = this.block();
         return {type: 'FOR_STMT', params: [varName, listDetails], body: body};
+    }
+    funcStatement() {
+        let name = this.currentToken.value;
+        let params = this.currentToken.params;
+        this.eat('FUNCTION_DEFINE');
+        let body = this.block();
+        return {type: 'FUNCTION_DEFINE', value: name, params: params, body: body};
     }
     // factor : NUMBER | IDENTIFIER | LPAREN expr RPAREN
     factor() {
@@ -380,6 +478,9 @@ class Parser {
     }
     // statement: ifStatement | print statement | assignment | expression
     statement() {
+        if (this.currentToken.type === 'FUNCTION_DEFINE') {
+            return this.funcStatement();
+        }
         if (this.currentToken.type === 'IF') {
             return this.ifStatement();
         }
@@ -405,6 +506,12 @@ class Parser {
                 return { type: 'VARIABLE', value: varToken.value };
             }
         }
+        if (this.currentToken.type === 'FUNCTION_CALL') {
+            let funcName = this.currentToken.value;
+            let params = this.currentToken.params;
+            this.eat('FUNCTION_CALL');
+            return { type: 'FUNCTION_CALL', value: funcName, params: params}
+        }
         return this.expr();
     }
     // Parses a program (a sequence of statements).
@@ -414,7 +521,7 @@ class Parser {
             let stmt = this.statement();
             statements.push(stmt);
         }
-        //console.log(statements)
+
         return { type: 'PROGRAM', statements: statements };
     }
 }
@@ -426,7 +533,34 @@ class Interpreter {
         this.env = {}; // Environment for variable storage.
     }
 
-    visit(node) {
+    visit(node, env) {
+        if (node.type === 'FUNCTION_CALL') {
+            let func = env[node.value];
+            let params = [];
+            for (let i = 0; i < node.params.length; i++) {
+                // Evaluate argument expressions using the current environment.
+                if (node.params[i].type === "IDENTIFIER") {
+                    params.push(env[node.params[i].value]);
+                } else {
+                    params.push(node.params[i].value);
+                }
+            }
+            // Create a new environment that inherits from the current (outer) env.
+            let new_env = Object.create(env);
+            // Bind function parameters to argument values.
+            for (let i = 0; i < func.params.length; i++) {
+                new_env[func.params[i].value] = params[i];
+            }
+            // Execute the function body in the new environment.
+            for (let i = 0; i < func.body.statements.length; i++) {
+                this.visit(func.body.statements[i], new_env);
+            }
+            return null;
+        }
+        if (node.type === 'FUNCTION_DEFINE') {
+            env[node.value] = {type: 'FUNCTION_DEFINE', value: node.value, params: node.params, body: node.body};
+            return null;
+        }
         if (node.type === 'NUMBER') {
             return node.value;
         }
@@ -437,7 +571,7 @@ class Interpreter {
             let elements = []
             for (let i = 0; i < node.value.length; i++) {
                 if (node.value[i].type === "IDENTIFIER") {
-                    elements.push(this.env[node.value[i].value])
+                    elements.push(env[node.value[i].value])
                 } else {
                     elements.push(node.value[i].value)
                 }
@@ -457,35 +591,35 @@ class Interpreter {
                 return result
             }
             if (node.value === 'len') {
-                return this.env[node.params[0].value].length
+                return env[node.params[0].value].length
             } else if (node.value === 'append') {
-                if (node.params[1].type == "IDENTIFIER") {
-                    return this.env[node.params[0].value].push(this.env[node.params[1].value])
+                if (node.params[1].type === "IDENTIFIER") {
+                    return env[node.params[0].value].push(env[node.params[1].value])
                 } else {
-                    return this.env[node.params[0].value].push(node.params[1].value)
+                    return env[node.params[0].value].push(node.params[1].value)
                 }
             } else if (node.value === 'pop') {
-                return this.env[node.params[0].value].pop()
+                return env[node.params[0].value].pop()
             } else if (node.value === 'item') {
-                if (node.params[1].type == "IDENTIFIER") {
-                    return this.env[node.params[0].value][this.env[node.params[1].value]]
+                if (node.params[1].type === "IDENTIFIER") {
+                    return env[node.params[0].value][env[node.params[1].value]]
                 } else {
 
-                    return this.env[node.params[0].value][parseInt(node.params[1].value)]
+                    return env[node.params[0].value][parseInt(node.params[1].value)]
                 }
             } else if (node.value === 'index') {
-                return this.env[node.params[0].value].indexOf(parseInt(node.params[1].value))
+                return env[node.params[0].value].indexOf(parseInt(node.params[1].value))
             }
         }
         if (node.type === 'VARIABLE') {
-            if (this.env.hasOwnProperty(node.value)) {
-                return this.env[node.value];
+            if (env.hasOwnProperty(node.value)) {
+                return env[node.value];
             }
             throw new Error('Undefined variable: ' + node.value);
         }
         if (node.type === 'BINOP') {
-            const left = this.visit(node.left);
-            const right = this.visit(node.right);
+            const left = this.visit(node.left, env);
+            const right = this.visit(node.right, env);
             switch (node.op) {
                 case 'PLUS': return left + right;
                 case 'MINUS': return left - right;
@@ -499,49 +633,64 @@ class Interpreter {
             }
         }
         if (node.type === 'ASSIGN') {
-            const value = this.visit(node.expr);
-            this.env[node.variable] = value;
+            const value = this.visit(node.expr, env);
+            env[node.variable] = value;
             return value;
         }
         if (node.type === 'PRINT_STMT') {
-            const value = this.visit(node.expr);
+            const value = this.visit(node.expr, env);
             console.log(value);
             return value;
         }
         if (node.type === 'BLOCK') {
             let result;
             for (const stmt of node.statements) {
-                result = this.visit(stmt);
+                result = this.visit(stmt, env);
             }
             return result;
         }
         if (node.type === 'IF_STMT') {
-            const condition = this.visit(node.condition);
+            const condition = this.visit(node.condition, env);
             if (condition) {
-                return this.visit(node.trueBranch);
-            } else if (node.falseBranch) {
-                return this.visit(node.falseBranch);
+                return this.visit(node.trueBranch, env);
+            }
+            for (let i = 0; i < node.elifBranches.length; i++) {
+                if (this.visit(node.elifBranches[i].condition, env)) {
+                    return this.visit(node.elifBranches[i].block, env);
+                }
+            }
+            if (node.falseBranch) {
+                return this.visit(node.falseBranch, env);
             }
             return null;
         }
         if (node.type === 'WHILE_STMT') {
-            while (this.visit(node.condition)) {
-                this.visit(node.body);
+            while (this.visit(node.condition, env)) {
+                this.visit(node.body, env);
             }
             return null;
         }
         if (node.type === 'FOR_STMT') {
             let list;
             if (node.params[1].type == "IDENTIFIER") {
-                list = this.env[node.params[1].value]
+                list = env[node.params[1].value]
             } else {
-                list = this.visit(node.params[1])
+                list = this.visit(node.params[1], env)
+            }
+            if (list == null) {
+                throw new Error('Undefined variable: ' + node.params[1].value);
             }
 
-            for (let i = 0; i < list.length; i++) {
-                this.env[node.params[0].value] = list[i]
-                this.visit(node.body)
+            if (list === undefined) {
+                throw new Error('Undefined variable: ' + node.params[1].value);
             }
+
+            let scoped_env = env;
+            for (let i = 0; i < list.length; i++) {
+                scoped_env[node.params[0].value] = list[i]
+                this.visit(node.body, scoped_env)
+            }
+
             return null;
         }
         throw new Error('Unknown node type: ' + node.type);
@@ -549,7 +698,7 @@ class Interpreter {
 
     interpret() {
         for (const stmt of this.ast.statements) {
-            this.visit(stmt);
+            this.visit(stmt, this.env);
         }
     }
 }
@@ -568,6 +717,7 @@ if (!fileName) {
     console.error('Usage: node snake.js <path-to-snake-code-file>');
     process.exit(1);
 }
+
 
 try {
     const code = fs.readFileSync(fileName, 'utf8');

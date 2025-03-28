@@ -1,25 +1,9 @@
-x = 5
-y = x + 10 * 2
-z = "hello"
-f = [x, y]
-print(f)
-f.append("1")
-print(f)
-f.pop()
-print(f)
-print(y)
-print(z)
-if (x == y) {
-    print(25)
-} else {
-    print(10)
+a = 10
+b = 10
+def example(t, z) {
+    print(t)
+    print(z)
 }
-i = 0
-while(i < 10) {
-    print(i)
-    i = i + 1
-}
-print("Starting List")
-for i in range(0,9) {
-    print(i)
-}
+
+example(a,b)
+
