@@ -1,5 +1,5 @@
 a = 10
-b = 10
+b = "a"
 def example(t, z) {
     print(t)
     print(z)
