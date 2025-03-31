@@ -7,3 +7,11 @@ def example(t, z) {
 
 example(a,b)
 
+def temp(t, z) {
+
+    f = true
+    return f
+}
+
+print(temp(10, 20))
+

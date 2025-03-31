@@ -180,6 +180,9 @@ class Lexer {
             this.advance(); // Skip the rpara
             return {type: "LIST_FUNC", value: "range", params: [start, end]};
         }
+        if (result === "return") {
+            return { type: 'RETURN', value: result };
+        }
 
         // 'print' is a reserved keyword.
         if (result === 'print') {
@@ -232,6 +235,9 @@ class Lexer {
             }
             this.advance(); // Skip the rpara
             return { type: 'FUNCTION_CALL', value: result, params: params };
+        }
+        if (result === 'true' || result === 'false') {
+            return { type: 'BOOLEAN', value: result == 'true' };
         }
         return { type: 'IDENTIFIER', value: result };
     }
@@ -363,17 +369,28 @@ class Parser {
     block() {
         this.eat('LBRACE');
         let statements = [];
+        let returnval;
         while (this.currentToken.type !== 'RBRACE') {
-            statements.push(this.statement());
+            let temp = this.statement();
+            statements.push(temp);
+            if (temp.type === "RETURN_STMT") {
+                returnval = temp
+            }
+
         }
         this.eat('RBRACE');
-        return { type: 'BLOCK', statements: statements };
+        return { type: 'BLOCK', statements: statements, returnval:returnval};
     }
     parseCondition() {
         this.eat('LPAREN');
         let condition = this.expr();
         this.eat('RPAREN');
         return condition
+    }
+    returnStatement() {
+        this.eat('RETURN');
+        let expr = this.expr();
+        return { type: 'RETURN_STMT', expr };
     }
     // ifStatement: IF LPAREN expr RPAREN block (ELSE block)?
     ifStatement() {
@@ -415,12 +432,16 @@ class Parser {
     // factor : NUMBER | IDENTIFIER | LPAREN expr RPAREN
     factor() {
         let token = this.currentToken;
+
         if (token.type === 'LIST_FUNC') {
             this.eat('LIST_FUNC');
             return {type: 'LIST_FUNC', value: token.value, params: token.params};
         } else if (token.type === 'NUMBER') {
             this.eat('NUMBER');
             return {type: 'NUMBER', value: token.value};
+        } else if (token.type === 'BOOLEAN') {
+            this.eat('BOOLEAN');
+            return {type: 'BOOLEAN', value: token.value};
         } else if (token.type == 'STRING') {
             this.eat('STRING');
             return {type: 'STRING', value: token.value};
@@ -435,6 +456,11 @@ class Parser {
             let node = this.expr();
             this.eat('RPAREN');
             return node;
+        }else if (token.type === 'FUNCTION_CALL') {
+            let funcName = this.currentToken.value;
+            let params = this.currentToken.params;
+            this.eat('FUNCTION_CALL');
+            return { type: 'FUNCTION_CALL', value: funcName, params: params}
         }
         throw new Error('Unexpected token in factor: ' + token.type);
     }
@@ -478,6 +504,9 @@ class Parser {
     }
     // statement: ifStatement | print statement | assignment | expression
     statement() {
+        if (this.currentToken.type === 'RETURN') {
+            return this.returnStatement();
+        }
         if (this.currentToken.type === 'FUNCTION_DEFINE') {
             return this.funcStatement();
         }
@@ -534,6 +563,9 @@ class Interpreter {
     }
 
     visit(node, env) {
+        if (node.type === 'RETURN_STMT') {
+            return this.visit(node.expr, env);
+        }
         if (node.type === 'FUNCTION_CALL') {
             let func = env[node.value];
             let params = [];
@@ -551,11 +583,16 @@ class Interpreter {
             for (let i = 0; i < func.params.length; i++) {
                 new_env[func.params[i].value] = params[i];
             }
+            let returnval;
+
             // Execute the function body in the new environment.
             for (let i = 0; i < func.body.statements.length; i++) {
-                this.visit(func.body.statements[i], new_env);
+                let x = this.visit(func.body.statements[i], new_env);
+                if (func.body.statements[i].type === "RETURN_STMT") {
+                    returnval = x;
+                }
             }
-            return null;
+            return returnval;
         }
         if (node.type === 'FUNCTION_DEFINE') {
             env[node.value] = {type: 'FUNCTION_DEFINE', value: node.value, params: node.params, body: node.body};
@@ -565,6 +602,9 @@ class Interpreter {
             return node.value;
         }
         if (node.type === 'STRING') {
+            return node.value;
+        }
+        if (node.type === 'BOOLEAN') {
             return node.value;
         }
         if (node.type === 'LIST') {
@@ -612,6 +652,7 @@ class Interpreter {
             }
         }
         if (node.type === 'VARIABLE') {
+
             if (env.hasOwnProperty(node.value)) {
                 return env[node.value];
             }
