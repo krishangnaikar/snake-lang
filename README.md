@@ -134,4 +134,4 @@ Make sure the `.snk` file contains valid code in the custom Snake language.
 
 ## ✅ To-Do / Possible Extensions
 
-- Enhanced error messages with line numbers
+- Importing other files
