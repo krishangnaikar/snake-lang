@@ -7,7 +7,7 @@ class Lexer {
     constructor(text) {
         this.text = text;
         this.pos = 0;
-        this.line = 1;           // Track current line number.
+        this.line = 1; // Track the current line number.
         this.currentChar = text[this.pos];
     }
     advance() {
@@ -72,7 +72,7 @@ class Lexer {
                 continue;
             }
             if (this.currentChar === ',') {
-                this.advance(); // Skip the comma
+                this.advance();
             }
         }
         if (this.currentChar === null) {
@@ -100,7 +100,7 @@ class Lexer {
                 continue;
             }
             if (/\s/.test(this.currentChar)) {
-                this.advance(); // Skip the space
+                this.advance(); // Skip whitespace
                 continue;
             }
         }
@@ -118,6 +118,10 @@ class Lexer {
             if (result === "def") {
                 return this.funcs();
             }
+        }
+        // New: check for "import" keyword.
+        if (result === "import") {
+            return { type: "IMPORT", value: result, line: this.line };
         }
         if (this.currentChar == ".") {
             return this.listFunc(result);
@@ -161,7 +165,7 @@ class Lexer {
                 this.advance(); // Skip the comma
             }
             if (/\s/.test(this.currentChar)) {
-                this.advance(); // Skip the space
+                this.advance(); // Skip whitespace
             }
             let end = this.number();
             this.advance(); // Skip the closing parenthesis
@@ -211,7 +215,7 @@ class Lexer {
                     continue;
                 }
                 if (/\s/.test(this.currentChar)) {
-                    this.advance(); // Skip the space
+                    this.advance(); // Skip whitespace
                 }
             }
             if (this.currentChar === null) {
@@ -366,6 +370,17 @@ class Parser {
         let expr = this.expr();
         return { type: 'RETURN_STMT', expr, line: this.currentToken.line };
     }
+    // New: import statement.
+    importStatement() {
+        this.eat('IMPORT');
+        // Expect a string token (the filename)
+        let fileToken = this.currentToken;
+        if (fileToken.type !== 'STRING') {
+            throw new Error(`Line ${fileToken.line}: Expected string literal after import`);
+        }
+        this.eat('STRING');
+        return { type: 'IMPORT', filename: fileToken.value, line: fileToken.line };
+    }
     // ifStatement: IF LPAREN expr RPAREN block (ELSE block)?
     ifStatement() {
         this.eat('IF');
@@ -475,8 +490,11 @@ class Parser {
         }
         return node;
     }
-    // statement: returnStatement | ifStatement | whileStatement | forStatement | print statement | assignment | expression
+    // statement: importStatement | returnStatement | ifStatement | whileStatement | forStatement | print statement | assignment | expression
     statement() {
+        if (this.currentToken.type === 'IMPORT') {
+            return this.importStatement();
+        }
         if (this.currentToken.type === 'RETURN') {
             return this.returnStatement();
         }
@@ -535,8 +553,20 @@ class Interpreter {
         this.env = {}; // Environment for variable storage.
     }
     visit(node, env) {
+        if (node.type === 'IMPORT') {
+            // Handle import: read the file and run its code in the current environment.
+            try {
+                const importedCode = fs.readFileSync(node.filename, 'utf8');
+                // Run the imported code in the current environment.
+                this.env = runSnakeCode(importedCode, env);
+            } catch (e) {
+                throw new Error(`Line ${node.line}: Error importing file "${node.filename}": ${e.message}`);
+            }
+
+            return null;
+        }
         if (node.type === 'RETURN_STMT') {
-            // Evaluate the return expression and propagate it.
+            // Evaluate and immediately return the value.
             let value = this.visit(node.expr, env);
             return value;
         }
@@ -550,7 +580,7 @@ class Interpreter {
                     params.push(node.params[i].value);
                 }
             }
-            let new_env = Object.create(env);
+            let new_env = env;
             for (let i = 0; i < func.params.length; i++) {
                 new_env[func.params[i].value] = params[i];
             }
@@ -593,7 +623,7 @@ class Interpreter {
                 let start = node.params[0].value;
                 let end = node.params[1].value;
                 let result = [];
-                for (let i = start; i <= end; i += 1) {
+                for (let i = start; i <= end; i++) {
                     result.push(i);
                 }
                 return result;
@@ -622,6 +652,7 @@ class Interpreter {
             if (env.hasOwnProperty(node.value)) {
                 return env[node.value];
             }
+
             throw new Error(`Line ${node.line}: Undefined variable: ${node.value}`);
         }
         if (node.type === 'BINOP') {
@@ -704,13 +735,15 @@ class Interpreter {
 }
 
 // -----------------------------
-// Function to run Snake code.
-function runSnakeCode(code) {
+// runSnakeCode now accepts an optional environment parameter.
+function runSnakeCode(code, env = {}) {
     const lexer = new Lexer(code);
     const parser = new Parser(lexer);
     const ast = parser.parse();
     const interpreter = new Interpreter(ast);
+    interpreter.env = env;
     interpreter.interpret();
+    return interpreter.env;
 }
 
 const fileName = process.argv[2];
@@ -723,5 +756,5 @@ try {
     const code = fs.readFileSync(fileName, 'utf8');
     runSnakeCode(code);
 } catch (err) {
-    console.error(err.message);
+    console.error('Error reading file:', err.message);
 }

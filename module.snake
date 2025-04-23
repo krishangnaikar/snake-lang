@@ -1,0 +1,4 @@
+x = 42
+def getX() {
+    return x
+}
