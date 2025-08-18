@@ -131,7 +131,3 @@ Make sure the `.snk` file contains valid code in the custom Snake language.
   - Undefined variables
 
 ---
-
-## ✅ To-Do / Possible Extensions
-
-- Importing other files
