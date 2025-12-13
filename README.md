@@ -5,6 +5,16 @@
 This project implements a basic interpreter for a custom programming language called **Snake** (not related to Python's Snake game!). The interpreter is written in **Node.js** and supports basic programming constructs such as variables, arithmetic, conditionals, loops, lists, and list functions.
 
 ---
+## 💻 Tech Stack
+
+| Category | Technology | Purpose |
+| :--- | :--- | :--- |
+| **Primary Language** | **Node.js** | The execution environment used to run the interpreter. |
+| **Implementation** | **Pure JavaScript** | Used for building the core components (Lexer, Parser, Interpreter) without external libraries. |
+| **Architecture** | **Three-Phase Interpreter** | The fundamental design pattern: **Lexer** $\rightarrow$ **Parser** (AST) $\rightarrow$ **Interpreter** (Execution). |
+| **Parsing Technique** | **Recursive Descent** | The specific top-down parsing method used to convert tokens into the Abstract Syntax Tree. |
+| **Data Structures** | **Lists** (Custom Implementation) | A core built-in data type, supporting custom methods like `.append`, `.pop`, and `.item`. |
+| **Execution Model** | **Environment/Scope** | Used by the Interpreter to store and manage variable bindings and scopes. |
 
 ## 📁 File Structure
 
