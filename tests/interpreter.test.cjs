@@ -31,3 +31,12 @@ test('missing filename prints usage and returns failure',()=>{
   const result=spawnSync(process.execPath,[entry],{encoding:'utf8',timeout:5000});
   assert.equal(result.status,1); assert.match(result.stderr,/Usage:/);
 });
+
+test('runtime failures return a nonzero exit status',()=>{
+  const result=run('print(missing_variable)\n');
+  assert.equal(result.status,1);
+  assert.match(result.stderr,/Undefined variable/);
+});
+test('successful programs return zero',()=>{
+  assert.equal(run('print(1)\n').status,0);
+});
