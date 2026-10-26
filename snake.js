@@ -757,4 +757,5 @@ try {
     runSnakeCode(code);
 } catch (err) {
     console.error('Error reading file:', err.message);
+    process.exitCode = 1;
 }
